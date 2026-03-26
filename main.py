@@ -82,7 +82,7 @@ def plot_visualizations(df, y, evaluation):
 if __name__ == '__main__':
     logging.info('Bắt đầu phân tích salary_in_usd')
 
-    df = pd.read_csv('data_science_salaries.csv')
+    df = pd.read_csv('data/raw/data_science_salaries.csv')
 
     logging.info('=== Data Exploration ===')
     logging.info('Shape: %s', df.shape)
@@ -148,5 +148,5 @@ if __name__ == '__main__':
     plt.show()
 
     best_pipeline = models[best_model_name]
-    joblib.dump(best_pipeline, 'best_salary_model.joblib')
+    joblib.dump(best_pipeline, 'models/best_salary_model.joblib')
     logging.info('Best model đã được lưu vào best_salary_model.joblib')
