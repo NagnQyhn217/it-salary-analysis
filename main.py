@@ -6,16 +6,17 @@
 # - So sánh hiệu suất các mô hình
 # =========================================================
 
-import logging
-import joblib
-import pandas as pd
-import numpy as np
+# ===== IMPORT THƯ VIỆN =====
+import logging              # Ghi log thay cho print
+import joblib               # Lưu / load mô hình
+import pandas as pd         # Xử lý dữ liệu dạng bảng
+import numpy as np          # Tính toán số học
 
-# Các thư viện xử lý và xây dựng mô hình
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
+# Thư viện ML
+from sklearn.model_selection import train_test_split   # Chia train/test
+from sklearn.preprocessing import StandardScaler, OneHotEncoder  # Chuẩn hóa & encode
+from sklearn.compose import ColumnTransformer          # Áp dụng xử lý theo cột
+from sklearn.pipeline import Pipeline                  # Pipeline xử lý + model
 
 # Các mô hình hồi quy
 from sklearn.linear_model import LinearRegression
@@ -29,220 +30,183 @@ import xgboost as xgb
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Cấu hình logging để hiển thị thông tin khi chạy chương trình
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Cấu hình logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 # =========================================================
-# Hàm đánh giá mô hình
+# HÀM ĐÁNH GIÁ MÔ HÌNH
 # =========================================================
 def evaluate_model(name, model, X_test, y_test):
-    # Dự đoán trên tập test
+    """
+    Đánh giá model bằng MAE, RMSE, R2
+    """
+    # Dự đoán
     y_pred = model.predict(X_test)
 
-    # Tính các chỉ số đánh giá
-    mae = mean_absolute_error(y_test, y_pred)   # Sai số tuyệt đối trung bình
-    rmse = np.sqrt(mean_squared_error(y_test, y_pred))  # Căn bậc hai MSE
-    r2 = r2_score(y_test, y_pred)  # Độ phù hợp của mô hình
+    # Tính metric
+    mae = mean_absolute_error(y_test, y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    r2 = r2_score(y_test, y_pred)
 
-    # In kết quả
-    logging.info('%s - MAE: %.4f, RMSE: %.4f, R2: %.4f', name, mae, rmse, r2)
+    # In log
+    logging.info('%s - MAE: %.4f, RMSE: %.4f, R2: %.4f',
+                 name, mae, rmse, r2)
 
     return {'MAE': mae, 'RMSE': rmse, 'R2': r2}
 
 
 # =========================================================
-# Hàm vẽ biểu đồ trực quan hóa dữ liệu
+# HÀM VẼ BIỂU ĐỒ (EDA + MODEL COMPARISON)
 # =========================================================
 def plot_visualizations(df, y, evaluation):
-    logging.info('Vẽ biểu đồ: histogram, boxplot, correlation, comparison')
+    logging.info('Vẽ biểu đồ trực quan hóa')
 
-    # Histogram phân bố lương
+    # ===== Histogram (phân bố lương) =====
     plt.figure(figsize=(8, 6))
     plt.hist(y, bins=30, edgecolor='black', alpha=0.7)
     plt.title('Histogram of Salary in USD')
-    plt.xlabel('Salary in USD')
+    plt.xlabel('Salary')
     plt.ylabel('Frequency')
-    plt.grid(True, alpha=0.3)
     plt.show()
 
-    # Boxplot phát hiện outlier
+    # ===== Boxplot (phát hiện outlier) =====
     plt.figure(figsize=(8, 6))
     sns.boxplot(y=y, color='skyblue')
-    plt.title('Boxplot of Salary in USD')
-    plt.ylabel('Salary in USD')
-    plt.grid(True, alpha=0.3)
+    plt.title('Boxplot of Salary')
     plt.show()
 
-    # So sánh mức lương theo kinh nghiệm
+    # ===== So sánh theo kinh nghiệm =====
     plt.figure(figsize=(8, 6))
-    sns.boxplot(x=df['experience_level'], y=df['salary_in_usd'], palette='Set3')
-    plt.title('Experience Level vs Salary')
-    plt.xlabel('Experience Level')
-    plt.ylabel('Salary in USD')
-    plt.grid(True, alpha=0.3)
+    sns.boxplot(x=df['experience_level'], y=df['salary_in_usd'])
+    plt.title('Experience vs Salary')
     plt.show()
 
-    # So sánh lương theo quốc gia (top 10)
+    # ===== So sánh theo quốc gia =====
     plt.figure(figsize=(12, 8))
     top_country = df['company_location'].value_counts().head(10).index
     sns.boxplot(data=df[df['company_location'].isin(top_country)],
-                x='company_location', y='salary_in_usd', palette='Set3')
+                x='company_location', y='salary_in_usd')
     plt.xticks(rotation=45)
-    plt.title('Salary by Company Location (Top 10 Countries)')
-    plt.xlabel('Company Location')
-    plt.ylabel('Salary in USD')
-    plt.grid(True, alpha=0.3)
+    plt.title('Salary by Country')
     plt.show()
 
-    # Ma trận tương quan
+    # ===== Correlation =====
     plt.figure(figsize=(10, 8))
     corr = df[['work_year', 'salary_in_usd']].corr()
-    sns.heatmap(corr, annot=True, cmap='coolwarm', fmt='.2f', linewidths=0.5)
+    sns.heatmap(corr, annot=True)
     plt.title('Correlation Matrix')
     plt.show()
 
-    # So sánh R2 giữa các mô hình
+    # ===== So sánh R2 giữa model =====
     plt.figure(figsize=(8, 6))
-    r2_values = [evaluation[model]['R2'] for model in evaluation.keys()]
-    plt.bar(evaluation.keys(), r2_values, color=['blue', 'green', 'red'], alpha=0.7)
-    plt.title('R2 Score Comparison')
-    plt.ylabel('R2 Score')
-    plt.ylim(0, 1)
-    plt.grid(True, alpha=0.3)
+    r2_values = [evaluation[m]['R2'] for m in evaluation]
+    plt.bar(evaluation.keys(), r2_values)
 
-    # Hiển thị giá trị trên cột
+    # Hiển thị số trên cột
     for i, v in enumerate(r2_values):
-        plt.text(i, v + 0.01, f'{v:.3f}', ha='center', va='bottom')
+        plt.text(i, v, f'{v:.3f}', ha='center')
 
+    plt.title('Model Comparison (R2)')
     plt.show()
 
 
 # =========================================================
-# Chương trình chính
+# CHƯƠNG TRÌNH CHÍNH
 # =========================================================
 if __name__ == '__main__':
-    logging.info('Bắt đầu phân tích salary_in_usd')
+    logging.info('Bắt đầu chương trình')
 
-    # Đọc dữ liệu từ file CSV
+    # ===== Đọc dữ liệu =====
     df = pd.read_csv('data/raw/data_science_salaries.csv')
 
-    # Khám phá dữ liệu ban đầu
-    logging.info('=== Data Exploration ===')
+    # ===== Khám phá dữ liệu =====
     logging.info('Shape: %s', df.shape)
-    logging.info('\nHead (first 5 rows):\n%s', df.head())
-    logging.info('\nDescribe:\n%s', df.describe())
+    logging.info('Head:\n%s', df.head())
+    logging.info('Describe:\n%s', df.describe())
 
-    # Tách dữ liệu đầu vào và đầu ra
+    # ===== Tách input/output =====
     X = df.drop(['salary_in_usd', 'salary'], axis=1, errors='ignore')
     y = df['salary_in_usd']
 
-    # Xác định feature dạng số và dạng phân loại
+    # ===== Phân loại feature =====
     numeric_features = X.select_dtypes(include=[np.number]).columns.tolist()
     categorical_features = X.select_dtypes(include=['object']).columns.tolist()
 
-    logging.info('Features used for training: %s', X.columns.tolist())
+    # ===== Tiền xử lý =====
+    preprocessor = ColumnTransformer([
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
+    ])
 
-    # =========================================================
-    # Tiền xử lý dữ liệu
-    # - Chuẩn hóa dữ liệu số
-    # - One-hot encoding dữ liệu dạng category
-    # =========================================================
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ('num', StandardScaler(), numeric_features),
-            ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_features)
-        ])
-
-    # Chia dữ liệu train/test
+    # ===== Chia dữ liệu =====
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42)
 
-    # =========================================================
-    # Khởi tạo các mô hình
-    # =========================================================
+    # ===== Khởi tạo model =====
     models = {
-        'Linear Regression': Pipeline(steps=[
+        'Linear Regression': Pipeline([
             ('preprocessor', preprocessor),
             ('regressor', LinearRegression())
         ]),
 
-        'Random Forest': Pipeline(steps=[
+        'Random Forest': Pipeline([
             ('preprocessor', preprocessor),
-            ('regressor', RandomForestRegressor(n_estimators=100, random_state=42))
+            ('regressor', RandomForestRegressor(n_estimators=100))
         ]),
 
-        'XGBoost': Pipeline(steps=[
+        'XGBoost': Pipeline([
             ('preprocessor', preprocessor),
-            ('regressor', xgb.XGBRegressor(
-                n_estimators=100,
-                random_state=42,
-                learning_rate=0.1,
-                verbosity=0
-            ))
+            ('regressor', xgb.XGBRegressor(n_estimators=100, learning_rate=0.1))
         ])
     }
 
     results = {}
     evaluation = {}
 
-    # =========================================================
-    # Huấn luyện và đánh giá từng mô hình
-    # =========================================================
+    # ===== Train + Evaluate =====
     for name, model in models.items():
-        logging.info('Huấn luyện mô hình: %s', name)
+        logging.info('Training: %s', name)
+
         model.fit(X_train, y_train)
 
         results[name] = model
         evaluation[name] = evaluate_model(name, model, X_test, y_test)
 
-    # So sánh kết quả
+    # ===== So sánh =====
     comparison_df = pd.DataFrame(evaluation).T
-    logging.info('=== Model Comparison Table ===\n%s', comparison_df.round(3))
+    logging.info('\n%s', comparison_df)
 
-    # Tìm mô hình tốt nhất
+    # ===== Chọn model tốt nhất =====
     best_model_name = comparison_df['R2'].idxmax()
-    best_score = comparison_df['R2'].max()
-    logging.info('Best Model: %s (R2=%.4f)', best_model_name, best_score)
+    logging.info('Best model: %s', best_model_name)
 
-    # Vẽ biểu đồ
+    # ===== Vẽ biểu đồ =====
     plot_visualizations(df, y, evaluation)
 
-    # =========================================================
-    # Feature Importance (Random Forest)
-    # =========================================================
+    # ===== Feature Importance (Random Forest) =====
     rf_model = results['Random Forest']
 
     feature_names = rf_model.named_steps['preprocessor'].get_feature_names_out()
     importances = rf_model.named_steps['regressor'].feature_importances_
 
-    feature_importance_df = pd.DataFrame({
+    importance_df = pd.DataFrame({
         'Feature': feature_names,
         'Importance': importances
-    })
+    }).sort_values(by='Importance', ascending=False).head(10)
 
-    top_10_features = feature_importance_df.sort_values(
-        by='Importance', ascending=False).head(10)
+    logging.info('\nTop Features:\n%s', importance_df)
 
-    logging.info('=== Feature Importance (Random Forest) ===')
-    logging.info('\n%s', top_10_features.round(4))
-
-    # Vẽ biểu đồ importance
+    # ===== Vẽ importance =====
     plt.figure(figsize=(10, 8))
-    plt.barh(top_10_features['Feature'], top_10_features['Importance'],
-             color='skyblue', alpha=0.8)
-    plt.title('Top 10 Feature Importance (Random Forest)')
-    plt.xlabel('Importance')
-    plt.ylabel('Feature')
+    plt.barh(importance_df['Feature'], importance_df['Importance'])
     plt.gca().invert_yaxis()
-    plt.grid(True, alpha=0.3)
+    plt.title('Feature Importance')
     plt.show()
 
-    # =========================================================
-    # Lưu mô hình tốt nhất
-    # =========================================================
+    # ===== Lưu model =====
     best_pipeline = models[best_model_name]
-
     joblib.dump(best_pipeline, 'models/best_salary_model.joblib')
 
-    logging.info('Best model đã được lưu vào best_salary_model.joblib')
+    logging.info('Đã lưu model')
